@@ -23,7 +23,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
   void _scanForDevices() {
     final bleService = Provider.of<BLEService>(context, listen: false);
     bleService.startScan();
-    bleService.flutterBlue.scanResults.listen((results) {
+    FlutterBluePlus.scanResults.listen((results) {
       setState(() {
         devicesList = results.map((r) => r.device).toList();
       });
