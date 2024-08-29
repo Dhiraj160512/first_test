@@ -14,7 +14,8 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'BLE Chat App',
+      debugShowCheckedModeBanner: false,
+      //title: 'BLE Chat App',
       theme: ThemeData(
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.purple,
