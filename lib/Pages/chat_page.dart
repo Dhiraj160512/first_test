@@ -88,15 +88,18 @@ class _BLEChatHomePageState extends State<BLEChatHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('BLE Chat App'),
+        title: const Text(
+          'BLE Chat App',
+          style: TextStyle(color: Colors.white),
+        ),
         actions: [
           connectedDevice == null
               ? IconButton(
-                  icon: const Icon(Icons.search),
+                  icon: const Icon(Icons.search, color: Colors.white),
                   onPressed: scanForDevices,
                 )
               : IconButton(
-                  icon: const Icon(Icons.cancel),
+                  icon: const Icon(Icons.cancel, color: Colors.white),
                   onPressed: disconnectDevice,
                 ),
         ],
