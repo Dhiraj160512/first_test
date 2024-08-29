@@ -1,58 +1,86 @@
-import 'package:ble_chat_app/Model/chat_message_model.dart';
-import 'package:ble_chat_app/Services/ble_service.dart';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:provider/provider.dart';
 
-
-class ChatPage extends StatefulWidget {
-  final BluetoothDevice device;
-
- const  ChatPage({super.key,
-  required this.device});
-
+class BLEChatHomePage extends StatefulWidget {
+  const BLEChatHomePage({super.key});
   @override
-  State<ChatPage> createState() => _ChatPageState();
+  State<BLEChatHomePage> createState() => _BLEChatHomePageState();
 }
 
-class _ChatPageState extends State<ChatPage> {
-  final List<ChatMessage> messages = [];
-  final TextEditingController messageController = TextEditingController();
-  late BluetoothCharacteristic characteristic;
+class _BLEChatHomePageState extends State<BLEChatHomePage> {
+  //FlutterBluePlus flutterBlue = FlutterBluePlus.instance;
+  BluetoothDevice? connectedDevice;
+  BluetoothCharacteristic? chatCharacteristic;
+
+  List<BluetoothDevice> availableDevices = [];
+  List<String> messages = [];
 
   @override
   void initState() {
     super.initState();
-    _setupCharacteristic();
+    scanForDevices();
   }
 
-  void _setupCharacteristic() async {
-    List<BluetoothService> services = await widget.device.discoverServices();
+  void scanForDevices() async {
+    FlutterBluePlus.startScan(
+      timeout: const Duration(seconds: 4),
+    );
+
+    FlutterBluePlus.scanResults.listen((results) {
+      setState(() {
+        availableDevices = results.map((r) => r.device).toList();
+      });
+    });
+  }
+
+  void connectToDevice(BluetoothDevice device) async {
+    await device.connect();
+    setState(() {
+      connectedDevice = device;
+    });
+
+    discoverServices();
+  }
+
+  void disconnectDevice() async {
+    if (connectedDevice != null) {
+      await connectedDevice!.disconnect();
+      setState(() {
+        connectedDevice = null;
+      });
+    }
+  }
+
+  void discoverServices() async {
+    List<BluetoothService> services = await connectedDevice!.discoverServices();
     services.forEach((service) {
-      service.characteristics.forEach((c) {
-        if (c.properties.write && c.properties.read) {
-          characteristic = c;
+      service.characteristics.forEach((characteristic) {
+        if (characteristic.uuid.toString() == "<Your-Characteristic-UUID>") {
+          chatCharacteristic = characteristic;
+          listenForMessages();
         }
       });
     });
   }
 
-  void _sendMessage() async {
-    final messageText = messageController.text;
-    final bleService = Provider.of<BLEService>(context, listen: false);
-    await bleService.sendMessage(characteristic, messageText);
-    setState(() {
-      messages.add(ChatMessage(message: messageText, timestamp: DateTime.now()));
+  void listenForMessages() {
+    chatCharacteristic?.value.listen((value) {
+      String receivedMessage = utf8.decode(value);
+      setState(() {
+        messages.add("Received: $receivedMessage");
+      });
     });
-    messageController.clear();
   }
 
-  void _receiveMessage() async {
-    final bleService = Provider.of<BLEService>(context, listen: false);
-    final jsonString = await bleService.receiveMessage(characteristic);
-    final message = ChatMessage.fromJson(jsonString);
+  void sendMessage(String message) {
+    String jsonString = jsonEncode({"message": message});
+    List<int> utf8Message = utf8.encode(jsonString);
+    chatCharacteristic?.write(utf8Message);
+
     setState(() {
-      messages.add(message);
+      messages.add("Sent: $message");
     });
   }
 
@@ -60,40 +88,73 @@ class _ChatPageState extends State<ChatPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Chat with ${widget.device.name}'),
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: ListView.builder(
-              itemCount: messages.length,
-              itemBuilder: (context, index) {
-                return ListTile(
-                  title: Text(messages[index].message),
-                  subtitle: Text(messages[index].timestamp.toString()),
-                );
-              },
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: messageController,
-                    decoration: const InputDecoration(hintText: 'Enter message'),
-                  ),
+        title: const Text('BLE Chat App'),
+        actions: [
+          connectedDevice == null
+              ? IconButton(
+                  icon: const Icon(Icons.search),
+                  onPressed: scanForDevices,
+                )
+              : IconButton(
+                  icon: const Icon(Icons.cancel),
+                  onPressed: disconnectDevice,
                 ),
-                IconButton(
-                  icon:const  Icon(Icons.send),
-                  onPressed: _sendMessage,
-                ),
-              ],
-            ),
-          ),
         ],
       ),
+      body: connectedDevice == null ? buildDeviceList() : buildChatScreen(),
+    );
+  }
+
+  Widget buildDeviceList() {
+    return ListView.builder(
+      itemCount: availableDevices.length,
+      itemBuilder: (context, index) {
+        return ListTile(
+          title: Text(availableDevices[index].name),
+          onTap: () => connectToDevice(availableDevices[index]),
+        );
+      },
+    );
+  }
+
+  Widget buildChatScreen() {
+    TextEditingController messageController = TextEditingController();
+
+    return Column(
+      children: [
+        Expanded(
+          child: ListView.builder(
+            itemCount: messages.length,
+            itemBuilder: (context, index) {
+              return ListTile(
+                title: Text(messages[index]),
+              );
+            },
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: messageController,
+                  decoration: const InputDecoration(
+                    hintText: "Enter message",
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: Icon(Icons.send),
+                onPressed: () {
+                  sendMessage(messageController.text);
+                  messageController.clear();
+                },
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
